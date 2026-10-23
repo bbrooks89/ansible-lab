@@ -1,3 +1,4 @@
+![lab](https://github.com/bbrooks89/ansible-lab/actions/workflows/lab.yml/badge.svg)
 # ansible-lab
 
 An immutable, disposable Ansible practice lab that runs on one Linux machine with Docker.
