@@ -1,0 +1,17 @@
+# Never commit keys or vault passwords
+*.pem
+id_*
+.vault_pass*
+vault_password*
+
+# Ansible runtime
+*.retry
+.ansible/
+workspace/.ansible/
+fact_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store

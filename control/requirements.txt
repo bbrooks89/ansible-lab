@@ -1,0 +1,4 @@
+# Pinned to a minor release so the lab behaves the same every rebuild.
+# To upgrade: change the version, then `./lab reset`.
+ansible-core~=2.18.0
+jmespath

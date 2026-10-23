@@ -1,0 +1,11 @@
+[Unit]
+Description=Ansible lab: host keys + authorized key
+Before=ssh.service sshd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/lab-firstboot
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+---
+# Full build of the lab. Run it twice: the second run should report changed=0
+# everywhere. That is idempotence, and CI checks it on every push.
+- name: Baseline
+  ansible.builtin.import_playbook: 02-baseline.yml
+
+- name: Web tier
+  ansible.builtin.import_playbook: 03-webserver.yml

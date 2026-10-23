@@ -1,0 +1,4 @@
+---
+webserver_package: nginx
+webserver_service: nginx
+webserver_root: /usr/share/nginx/html

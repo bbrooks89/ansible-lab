@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# lab - one command to drive the Ansible practice lab.
+# Run `./lab help` for usage.
+set -euo pipefail
+
+cd "$(dirname "$(readlink -f "$0")")"
+
+export LAB_UID="${LAB_UID:-$(id -u)}"
+export LAB_GID="${LAB_GID:-$(id -g)}"
+
+COMPOSE=(docker compose)
+NODES=(ubuntu1 ubuntu2 rocky1)
+
+# Allocate a TTY only when we have one (keeps CI and pipes working)
+if [[ -t 0 && -t 1 ]]; then TTY=(); else TTY=(-T); fi
+
+ctl() { "${COMPOSE[@]}" exec "${TTY[@]}" -u ansible control "$@"; }
+
+wait_ready() {
+  local tries="${1:-60}"
+  printf 'Waiting for managed nodes to answer Ansible ping'
+  for ((i = 1; i <= tries; i++)); do
+    if ctl ansible all -m ansible.builtin.ping -o >/dev/null 2>&1; then
+      printf ' ready.\n'
+      return 0
+    fi
+    printf '.'
+    sleep 2
+  done
+  printf ' timed out.\n'
+  ctl ansible all -m ansible.builtin.ping -o || true
+  return 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: ./lab <command> [args]
+
+  up              Build images (if needed), start the lab, wait until every node answers
+  down            Stop and remove containers (keeps SSH keys and built images)
+  reset           Throw everything away and rebuild from scratch: new containers,
+                  new SSH host keys, new lab keypair. Your ./workspace is untouched.
+  destroy         reset without starting again, and delete the lab images too
+  shell           Open a bash shell on the control node (as 'ansible', in ~/lab)
+  ssh <node>      SSH from the control node into a managed node
+  console <node>  Root shell inside a managed node via docker (bypasses SSH, for debugging)
+  ping            ansible all -m ping
+  run <playbook> [ansible-playbook args]
+                  Run playbooks/<playbook> from the control node, e.g.
+                  ./lab run site.yml --check --diff
+  status          Container status
+  logs [service]  Follow container logs
+EOF
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  up)
+    "${COMPOSE[@]}" up -d --build
+    wait_ready
+    echo "Lab is up. Try: ./lab ping   or   ./lab shell"
+    ;;
+  down)
+    "${COMPOSE[@]}" down --remove-orphans
+    ;;
+  reset)
+    "${COMPOSE[@]}" down -v --remove-orphans
+    "${COMPOSE[@]}" up -d --build --force-recreate
+    wait_ready
+    echo "Lab rebuilt from scratch."
+    ;;
+  destroy)
+    "${COMPOSE[@]}" down -v --remove-orphans --rmi local
+    ;;
+  shell)
+    ctl bash
+    ;;
+  ssh)
+    node="${1:?usage: ./lab ssh <node>}"
+    ctl ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "ansible@${node}"
+    ;;
+  console)
+    node="${1:?usage: ./lab console <node>}"
+    "${COMPOSE[@]}" exec "${TTY[@]}" "$node" bash
+    ;;
+  ping)
+    ctl ansible all -m ansible.builtin.ping -o
+    ;;
+  run)
+    playbook="${1:?usage: ./lab run <playbook.yml> [args]}"
+    shift
+    ctl ansible-playbook "playbooks/${playbook}" "$@"
+    ;;
+  status)
+    "${COMPOSE[@]}" ps
+    ;;
+  logs)
+    "${COMPOSE[@]}" logs -f "$@"
+    ;;
+  nodes)
+    printf '%s\n' "${NODES[@]}"
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: $cmd" >&2
+    usage >&2
+    exit 1
+    ;;
+esac

@@ -1,0 +1,6 @@
+=====================================================
+ {{ lab_name }} :: {{ inventory_hostname }}
+ {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }} ({{ ansible_facts['os_family'] }})
+ groups: {{ group_names | join(', ') }}
+ This file is managed by Ansible. Local edits will be overwritten.
+=====================================================

@@ -1,0 +1,49 @@
+---
+- name: Baseline every node (packages, admin group, users, sudo, motd)
+  hosts: all
+  become: true
+  tasks:
+    - name: Refresh the apt cache (Debian family only)
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Install baseline packages (one task, works on apt and dnf)
+      ansible.builtin.package:
+        name: "{{ baseline_packages }}"
+        state: present
+
+    - name: Create the admin group
+      ansible.builtin.group:
+        name: "{{ lab_admin_group }}"
+        state: present
+
+    - name: Create lab users
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        comment: "{{ item.comment }}"
+        groups: "{{ lab_admin_group }}"
+        append: true
+        shell: /bin/bash
+        state: present
+      loop: "{{ lab_users }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Give the admin group sudo (validated before it is put in place)
+      ansible.builtin.copy:
+        dest: "/etc/sudoers.d/{{ lab_admin_group }}"
+        content: "%{{ lab_admin_group }} ALL=(ALL) NOPASSWD:ALL\n"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: /usr/sbin/visudo -cf %s
+
+    - name: Message of the day
+      ansible.builtin.template:
+        src: templates/motd.j2
+        dest: /etc/motd
+        owner: root
+        group: root
+        mode: "0644"

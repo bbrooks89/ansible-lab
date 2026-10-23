@@ -1,0 +1,87 @@
+# Immutable Ansible practice lab
+#   1 control node  (Ansible lives here)
+#   3 managed nodes (real systemd + sshd, 2x Ubuntu 24.04, 1x Rocky Linux 9)
+#
+# Nothing is ever fixed by hand: break it, then `./lab reset` rebuilds every
+# container and regenerates every SSH key from scratch.
+
+name: ansible-lab
+
+x-managed-node: &managed-node
+  # systemd needs its own cgroup tree and a writable /run
+  cgroup: host
+  tmpfs:
+    - /run
+    - /run/lock
+    - /tmp
+  volumes:
+    - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    - lab-pubkey:/lab-pubkey:ro          # public key only, read-only
+  depends_on:
+    control:
+      condition: service_healthy         # wait until the keypair exists
+  networks: [lab]
+  stop_grace_period: 15s
+  # If systemd will not boot on your host (see README > Troubleshooting),
+  # uncomment the next line as a last resort:
+  # privileged: true
+
+services:
+  control:
+    build:
+      context: ./control
+      args:
+        LAB_UID: ${LAB_UID:-1000}
+        LAB_GID: ${LAB_GID:-1000}
+    image: ansible-lab/control:latest
+    container_name: lab-control
+    hostname: control
+    working_dir: /home/ansible/lab
+    volumes:
+      - ./workspace:/home/ansible/lab    # edit playbooks on the host, run them here
+      - lab-secret:/lab-secret           # private key never leaves the control node
+      - lab-pubkey:/lab-pubkey
+    healthcheck:
+      test: ["CMD", "test", "-s", "/lab-pubkey/id_ed25519.pub"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    networks: [lab]
+
+  ubuntu1:
+    <<: *managed-node
+    build:
+      context: ./nodes
+      dockerfile: ubuntu/Dockerfile
+    image: ansible-lab/ubuntu:24.04
+    container_name: lab-ubuntu1
+    hostname: ubuntu1
+    ports:
+      - "${UBUNTU1_HTTP_PORT:-8081}:80"
+
+  ubuntu2:
+    <<: *managed-node
+    build:
+      context: ./nodes
+      dockerfile: ubuntu/Dockerfile
+    image: ansible-lab/ubuntu:24.04
+    container_name: lab-ubuntu2
+    hostname: ubuntu2
+
+  rocky1:
+    <<: *managed-node
+    build:
+      context: ./nodes
+      dockerfile: rocky/Dockerfile
+    image: ansible-lab/rocky:9
+    container_name: lab-rocky1
+    hostname: rocky1
+    ports:
+      - "${ROCKY1_HTTP_PORT:-8082}:80"
+
+networks:
+  lab: {}
+
+volumes:
+  lab-secret: {}
+  lab-pubkey: {}

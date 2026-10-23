@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>{{ inventory_hostname }}</title></head>
+<body style="font-family: system-ui, sans-serif; margin: 3rem;">
+  <h1>{{ inventory_hostname }}</h1>
+  <p>{{ webserver_message }}</p>
+  <ul>
+    <li>OS: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}</li>
+    <li>Docroot: {{ webserver_root }}</li>
+    <li>Groups: {{ group_names | join(', ') }}</li>
+  </ul>
+</body>
+</html>

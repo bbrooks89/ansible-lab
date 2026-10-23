@@ -1,0 +1,17 @@
+---
+lab_name: ansible-lab
+
+# Installed on every node by playbooks/02-baseline.yml.
+# editor_package differs per OS family (see ubuntu.yml / rocky.yml).
+baseline_packages:
+  - tree
+  - jq
+  - less
+  - "{{ editor_package }}"
+
+lab_admin_group: labops
+lab_users:
+  - name: alice
+    comment: Alice Admin
+  - name: bob
+    comment: Bob Builder

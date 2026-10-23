@@ -1,0 +1,6 @@
+---
+- name: Web tier - nginx on Ubuntu and Rocky from one role
+  hosts: web
+  become: true
+  roles:
+    - webserver

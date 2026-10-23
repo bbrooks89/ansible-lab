@@ -1,0 +1,60 @@
+name: lab
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install linters
+        run: |
+          pip install -r control/requirements.txt ansible-lint
+          ansible-galaxy collection install -r control/requirements.yml
+      - name: ansible-lint
+        working-directory: workspace
+        env:
+          ANSIBLE_COLLECTIONS_PATH: ~/.ansible/collections
+        run: ansible-lint
+      - name: Syntax check
+        working-directory: workspace
+        env:
+          ANSIBLE_COLLECTIONS_PATH: ~/.ansible/collections
+        run: ansible-playbook --syntax-check playbooks/*.yml
+
+  integration:
+    runs-on: ubuntu-24.04
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bring the lab up
+        run: ./lab up
+      - name: Ping
+        run: ./lab ping
+      - name: First run of site.yml
+        run: ./lab run site.yml
+      - name: Second run must change nothing (idempotence)
+        run: |
+          ./lab run site.yml | tee second-run.log
+          if grep -E 'changed=[1-9]' second-run.log; then
+            echo "::error::site.yml is not idempotent"
+            exit 1
+          fi
+      - name: Pages answer on the host ports
+        run: |
+          curl -fsS localhost:8081 | grep -q ubuntu1
+          curl -fsS localhost:8082 | grep -q rocky1
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          ./lab status
+          docker compose logs --no-color | tail -200
+      - name: Tear down
+        if: always()
+        run: ./lab destroy

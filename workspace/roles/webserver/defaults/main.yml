@@ -1,0 +1,4 @@
+---
+# Overridable defaults (lowest precedence). group_vars/web.yml sets webserver_message.
+webserver_message: "Hello from the webserver role"
+webserver_verify: true

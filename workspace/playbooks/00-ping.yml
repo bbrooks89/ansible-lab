@@ -1,0 +1,17 @@
+---
+- name: Prove the control node can reach and use every managed node
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Ping (checks SSH + Python, not ICMP)
+      ansible.builtin.ping:
+
+    - name: Prove privilege escalation works
+      ansible.builtin.command: id -un
+      become: true
+      register: whoami
+      changed_when: false
+
+    - name: Show who we became
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} -> {{ whoami.stdout }}"
