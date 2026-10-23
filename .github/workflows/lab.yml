@@ -9,8 +9,8 @@ jobs:
   lint:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install linters
@@ -32,18 +32,18 @@ jobs:
     runs-on: ubuntu-24.04
     needs: lint
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Bring the lab up
         run: ./lab up
       - name: Ping
         run: ./lab ping
       - name: First run of site.yml
-        run: ./lab run site.yml
+        run: .github/scripts/run-playbook.sh site.yml first-run.log
       - name: Second run must change nothing (idempotence)
         run: |
-          ./lab run site.yml | tee second-run.log
+          .github/scripts/run-playbook.sh site.yml second-run.log
           if grep -E 'changed=[1-9]' second-run.log; then
-            echo "::error::site.yml is not idempotent"
+            echo "::error title=Not idempotent::$(grep -E -B3 '^changed:' second-run.log | head -c 3000 | sed ':a;N;$!ba;s/\n/%0A/g')"
             exit 1
           fi
       - name: Pages answer on the host ports
