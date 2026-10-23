@@ -11,7 +11,10 @@ RUN apt-get update \
       openssh-server sudo \
       python3 python3-apt \
       iproute2 iputils-ping ca-certificates \
- && apt-get clean && rm -rf /var/lib/apt/lists/*
+ && apt-get clean
+# The apt package index is kept on purpose. A real server always has one, and an
+# empty index with a fresh directory timestamp fools `cache_valid_time` into
+# skipping `apt update`, so package installs fail with "No package matching".
 
 # Units that cannot work inside a container
 RUN systemctl mask \
