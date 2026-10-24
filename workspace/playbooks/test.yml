@@ -1,0 +1,33 @@
+---
+- name: System Maintenance and Package Management
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: 1. Check uptime everywhere
+      ansible.builtin.command:
+        cmd: uptime
+
+    - name: 2. Check disk space on RHEL/Rocky family only
+      ansible.builtin.command:
+        cmd: df -h /
+      when: inventory_hostname in groups['rocky'] or ansible_os_family == 'RedHat'
+
+    - name: 3. Install htop on ubuntu2 as root (First Run)
+      ansible.builtin.package:
+        name: htop
+        state: present
+      become: true
+      when: inventory_hostname == 'ubuntu2'
+
+    - name: 4. Run installation again to demonstrate idempotency
+      ansible.builtin.package:
+        name: htop
+        state: present
+      become: true
+      when: inventory_hostname == 'ubuntu2'
+
+    - name: 5. Verify htop binary location on ubuntu2
+      ansible.builtin.command:
+        cmd: which htop
+      when: inventory_hostname == 'ubuntu2'
