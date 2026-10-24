@@ -7,10 +7,12 @@
     - name: 1. Check uptime everywhere
       ansible.builtin.command:
         cmd: uptime
+      changed_when: false
 
     - name: 2. Check disk space on RHEL/Rocky family only
       ansible.builtin.command:
         cmd: df -h /
+      changed_when: false
       when: inventory_hostname in groups['rocky'] or ansible_os_family == 'RedHat'
 
     - name: 3. Install htop on ubuntu2 as root (First Run)
@@ -30,4 +32,5 @@
     - name: 5. Verify htop binary location on ubuntu2
       ansible.builtin.command:
         cmd: which htop
+      changed_when: false
       when: inventory_hostname == 'ubuntu2'
