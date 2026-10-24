@@ -1,4 +1,16 @@
 ---
+# Installed straight from the collections' official GitHub repos at pinned
+# release tags, so builds don't depend on Ansible Galaxy being up and every
+# rebuild gets exactly the same versions. To upgrade: change a tag, then
+# `./lab reset`.
 collections:
-  - name: ansible.posix
-  - name: community.general
+  - name: https://github.com/ansible-collections/ansible.posix.git
+    type: git
+    version: 2.2.2
+  - name: https://github.com/ansible-collections/community.general.git
+    type: git
+    version: 13.5.0
+  # Dependency of community.general, pinned here so it isn't fetched from Galaxy
+  - name: https://github.com/ansible-collections/community.library_inventory_filtering.git
+    type: git
+    version: 1.1.5
