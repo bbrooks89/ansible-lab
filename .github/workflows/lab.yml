@@ -85,14 +85,6 @@ jobs:
           terraform_wrapper: false
       - name: Provision the lab with Terraform
         run: ./lab-tf up
-      - name: Terraform shows no drift after apply
-        run: |
-          terraform -chdir=terraform plan -input=false -detailed-exitcode -no-color > plan.txt || rc=$?
-          if [[ "${rc:-0}" -ne 0 ]]; then
-            cat plan.txt
-            echo "::error title=Terraform drift::second plan was not empty (exit ${rc})"
-            exit 1
-          fi
       - name: Ping
         run: ./lab-tf ping
       - name: First run of site.yml
@@ -108,6 +100,21 @@ jobs:
         run: |
           curl -fsS localhost:8091 | grep -q ubuntu1
           curl -fsS localhost:8092 | grep -q rocky1
+      - name: Terraform shows no drift after apply
+        run: |
+          terraform -chdir=terraform plan -input=false -detailed-exitcode -no-color -out=drift.tfplan > plan.txt || rc=$?
+          if [[ "${rc:-0}" -ne 0 ]]; then
+            cat plan.txt
+            # Which resources and which attributes want to change, as a readable annotation
+            summary=$(terraform -chdir=terraform show -json drift.tfplan | jq -r '
+              .resource_changes[] | select(.change.actions != ["no-op"]) |
+              "\(.address) \(.change.actions | join(",")): " +
+              ([ (.change.before // {}) as $b | (.change.after // {}) as $a |
+                 ($b + $a | keys[]) | select($b[.] != $a[.]) ] | join(" "))' | head -c 3000)
+            summary=${summary//$'\n'/'%0A'}
+            echo "::error title=Terraform drift (exit ${rc})::${summary}"
+            exit 1
+          fi
       - name: Diagnostics on failure
         if: failure()
         run: |
