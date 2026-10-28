@@ -1,0 +1,24 @@
+---
+- name: Explore facts - the data Ansible uses to make decisions
+  hosts: all
+  tasks:
+    - name: Summarize each host
+      ansible.builtin.debug:
+        msg:
+          - "host:       {{ inventory_hostname }}"
+          - "distro:     {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+          - "os_family:   {{ ansible_facts['os_family'] }}"
+          - "pkg manager: {{ ansible_facts['pkg_mgr'] }}"
+          - "python:      {{ ansible_facts['python_version'] }}"
+          - "ipv4:        {{ ansible_facts['default_ipv4']['address'] | default('n/a') }}"
+          - "groups:      {{ group_names | join(', ') }}"
+
+    - name: Only runs on the RHEL family
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} is RHEL-like"
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Report hardware specs on multi-vCPU hosts
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} has {{ ansible_facts['processor_vcpus'] }} vCPUs and {{ ansible_facts['memtotal_mb'] }} MB of RAM"
+      when: ansible_facts['processor_vcpus'] > 1
