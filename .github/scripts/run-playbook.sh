@@ -2,11 +2,13 @@
 # Runs a playbook through ./lab and, if it fails, publishes the failing tasks
 # as a GitHub annotation so the error shows on the run summary page.
 # Usage: .github/scripts/run-playbook.sh <playbook> <logfile> [ansible-playbook args]
+# Set LAB=./lab-tf to run against the Terraform-provisioned lab (default: ./lab).
 set -uo pipefail
 
 playbook="$1"; log="$2"; shift 2
+lab="${LAB:-./lab}"
 
-./lab run "$playbook" "$@" 2>&1 | tee "$log"
+"$lab" run "$playbook" "$@" 2>&1 | tee "$log"
 rc=${PIPESTATUS[0]}
 
 if [[ $rc -ne 0 ]]; then

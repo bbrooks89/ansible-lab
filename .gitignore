@@ -15,3 +15,9 @@ fact_cache/
 .idea/
 *.swp
 .DS_Store
+
+# Terraform: state holds the lab's live details and is local-only
+terraform/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log

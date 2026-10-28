@@ -7,7 +7,8 @@ An immutable, disposable Ansible practice lab that runs on one Linux machine wit
 - **3 managed nodes** that boot real **systemd** and **sshd**: two Ubuntu 24.04 and one Rocky Linux 9, so you practice against both the Debian and RHEL families
 - **Key-only SSH** with a keypair generated fresh on every rebuild; nothing secret is committed
 - **One command** (`./lab reset`) wipes it all and brings back a clean lab in about a minute
-- **CI** lints every playbook and proves `site.yml` is idempotent on every push
+- **Two ways to provision:** Docker Compose (`./lab`) or **Terraform** (`./lab-tf`), same lab either way
+- **CI** lints every playbook and the Terraform, provisions the lab both ways, and proves `site.yml` is idempotent (and Terraform shows no drift) on every push
 
 > **Immutable means:** you never repair a node by hand. If you break something, rebuild it.
 > Your playbooks live in `./workspace` on the host and survive every reset.
@@ -70,8 +71,14 @@ Then open <http://localhost:8081> (ubuntu1) and <http://localhost:8082> (rocky1)
 
 ```text
 ansible-lab/
-├── lab                     # helper CLI
+├── lab                     # helper CLI (Compose)
+├── lab-tf                  # helper CLI (Terraform)
 ├── compose.yaml            # control + 3 managed nodes
+├── terraform/              # the same lab as Terraform (Docker provider)
+│   ├── versions.tf         # Terraform + provider pins
+│   ├── variables.tf        # name prefix, UID/GID, managed node map
+│   ├── main.tf             # network, volumes, images, containers
+│   └── outputs.tf          # container names, URLs
 ├── control/                # control node image (Ansible, pinned)
 │   ├── Dockerfile
 │   ├── entrypoint.sh       # generates the lab keypair on first start
@@ -120,6 +127,46 @@ The `ansible` user on each node has passwordless sudo and no password, so SSH ke
 ## 8. Limits (it's containers, not VMs)
 
 The nodes share the host kernel, so these won't behave like a real server: kernel modules, `sysctl` on most keys, `reboot` (it stops the container), mounts and block devices, SELinux, firewalld/ufw rules, and `timedatectl`. For those, use VMs (Vagrant or KVM). Packages, files, templates, users, services, handlers, roles, facts, loops, conditionals, vault, check mode and idempotence all behave as they do on real hosts.
+
+## 9. Provisioning with Terraform
+
+`./lab-tf` builds the same lab with Terraform and the
+[kreuzwerker/docker](https://registry.terraform.io/providers/kreuzwerker/docker/latest) provider
+instead of Compose. Terraform provisions the infrastructure; Ansible, running on the control
+node, configures it. That split is the same one real platforms use with cloud VMs.
+
+Requires Terraform 1.6+ on the host. It uses its own names (`tflab-*`) and ports (8091, 8092),
+so it can run beside the Compose lab.
+
+```bash
+./lab-tf plan        # see what will be created
+./lab-tf up          # terraform apply, then wait for Ansible ping
+./lab-tf run site.yml
+./lab-tf run site.yml   # again: changed=0
+./lab-tf destroy
+```
+
+Then open <http://localhost:8091> (ubuntu1) and <http://localhost:8092> (rocky1).
+
+| Command | What it does |
+|---|---|
+| `./lab-tf plan` | `terraform plan` |
+| `./lab-tf up` | `terraform apply`, then wait until every node answers Ansible ping |
+| `./lab-tf reset` | `terraform destroy` then `apply`: new containers, volumes and keys |
+| `./lab-tf destroy` | Remove containers, volumes, network and images |
+| `./lab-tf shell` / `ssh <node>` / `ping` / `run <playbook>` | Same as `./lab` |
+| `./lab-tf status` / `output` | Terraform state, container status, outputs |
+
+**Adding a node** is one map entry: add it to `managed_nodes` (in `terraform/variables.tf`, or a
+`terraform.tfvars` file), add it to `workspace/inventory/hosts.yml`, then `./lab-tf up`. Terraform
+creates only the new container.
+
+What CI checks on every push: `terraform fmt` and `validate`, a full `apply`, a second `plan`
+that must be empty (no drift), `site.yml` twice with `changed=0` the second time, both web pages
+answering, and `destroy`.
+
+State is kept in `terraform/terraform.tfstate` on your machine and is git-ignored. After your first
+`./lab-tf up`, commit `terraform/.terraform.lock.hcl` so every machine uses the same provider build.
 
 ## License
 

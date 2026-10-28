@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# lab-tf - drive the Terraform-provisioned version of the lab.
+# Same lab as ./lab, but Terraform builds the infrastructure instead of Compose.
+# Run `./lab-tf help` for usage.
+set -euo pipefail
+
+cd "$(dirname "$(readlink -f "$0")")"
+
+export TF_VAR_lab_uid="${TF_VAR_lab_uid:-$(id -u)}"
+export TF_VAR_lab_gid="${TF_VAR_lab_gid:-$(id -g)}"
+export TF_IN_AUTOMATION=1
+
+TF=(terraform -chdir=terraform)
+
+# Allocate a TTY only when we have one (keeps CI and pipes working)
+if [[ -t 0 && -t 1 ]]; then TTY=(-it); else TTY=(-i); fi
+
+control() { "${TF[@]}" output -raw control_container; }
+ctl() { docker exec "${TTY[@]}" -u ansible -w /home/ansible/lab "$(control)" "$@"; }
+
+init() { "${TF[@]}" init -input=false >/dev/null; }
+
+wait_ready() {
+  local tries="${1:-60}"
+  printf 'Waiting for managed nodes to answer Ansible ping'
+  for ((i = 1; i <= tries; i++)); do
+    if ctl ansible all -m ansible.builtin.ping -o >/dev/null 2>&1; then
+      printf ' ready.\n'
+      return 0
+    fi
+    printf '.'
+    sleep 2
+  done
+  printf ' timed out.\n'
+  ctl ansible all -m ansible.builtin.ping -o || true
+  return 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: ./lab-tf <command> [args]
+
+  plan            Show what Terraform would create or change
+  up              terraform apply, then wait until every node answers Ansible ping
+  reset           Destroy everything (containers, volumes, keys) and apply again
+  destroy         terraform destroy: remove containers, volumes, network and images
+  shell           Bash on the control node (as 'ansible', in ~/lab)
+  ssh <node>      SSH from the control node into a managed node
+  ping            ansible all -m ping
+  run <playbook> [ansible-playbook args]
+                  Run playbooks/<playbook> from the control node
+  status          Terraform state and container status
+  output          Terraform outputs (container names, URLs)
+EOF
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  plan)
+    init
+    "${TF[@]}" plan -input=false "$@"
+    ;;
+  up)
+    init
+    "${TF[@]}" apply -input=false -auto-approve "$@"
+    wait_ready
+    echo "Lab is up. Try: ./lab-tf ping   or   ./lab-tf shell"
+    ;;
+  reset)
+    init
+    "${TF[@]}" destroy -input=false -auto-approve
+    "${TF[@]}" apply -input=false -auto-approve
+    wait_ready
+    echo "Lab rebuilt from scratch."
+    ;;
+  destroy)
+    init
+    "${TF[@]}" destroy -input=false -auto-approve "$@"
+    ;;
+  shell)
+    ctl bash
+    ;;
+  ssh)
+    node="${1:?usage: ./lab-tf ssh <node>}"
+    ctl ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "ansible@${node}"
+    ;;
+  ping)
+    ctl ansible all -m ansible.builtin.ping -o
+    ;;
+  run)
+    playbook="${1:?usage: ./lab-tf run <playbook.yml> [args]}"
+    shift
+    ctl ansible-playbook "playbooks/${playbook}" "$@"
+    ;;
+  status)
+    "${TF[@]}" state list 2>/dev/null || echo "(no Terraform state yet)"
+    docker ps -a --filter "name=${TF_VAR_name_prefix:-tflab}-" \
+      --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+    ;;
+  output)
+    "${TF[@]}" output
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: $cmd" >&2
+    usage >&2
+    exit 1
+    ;;
+esac

@@ -58,3 +58,63 @@ jobs:
       - name: Tear down
         if: always()
         run: ./lab destroy
+
+  terraform-lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: terraform fmt
+        run: terraform -chdir=terraform fmt -check -recursive -diff
+      - name: terraform init
+        run: terraform -chdir=terraform init -input=false -backend=false
+      - name: terraform validate
+        run: terraform -chdir=terraform validate
+
+  integration-terraform:
+    runs-on: ubuntu-24.04
+    needs: [lint, terraform-lint]
+    env:
+      LAB: ./lab-tf
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: Provision the lab with Terraform
+        run: ./lab-tf up
+      - name: Terraform shows no drift after apply
+        run: |
+          terraform -chdir=terraform plan -input=false -detailed-exitcode -no-color > plan.txt || rc=$?
+          if [[ "${rc:-0}" -ne 0 ]]; then
+            cat plan.txt
+            echo "::error title=Terraform drift::second plan was not empty (exit ${rc})"
+            exit 1
+          fi
+      - name: Ping
+        run: ./lab-tf ping
+      - name: First run of site.yml
+        run: .github/scripts/run-playbook.sh site.yml first-run.log
+      - name: Second run must change nothing (idempotence)
+        run: |
+          .github/scripts/run-playbook.sh site.yml second-run.log
+          if grep -E 'changed=[1-9]' second-run.log; then
+            echo "::error title=Not idempotent::$(grep -E -B3 '^changed:' second-run.log | head -c 3000 | sed ':a;N;$!ba;s/\n/%0A/g')"
+            exit 1
+          fi
+      - name: Pages answer on the host ports
+        run: |
+          curl -fsS localhost:8091 | grep -q ubuntu1
+          curl -fsS localhost:8092 | grep -q rocky1
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          ./lab-tf status || true
+          for c in $(docker ps -a --filter name=tflab- --format '{{.Names}}'); do
+            echo "==== $c"; docker logs --tail 80 "$c" 2>&1 || true
+          done
+      - name: Tear down
+        if: always()
+        run: ./lab-tf destroy
