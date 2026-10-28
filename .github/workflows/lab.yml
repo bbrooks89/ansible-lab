@@ -102,7 +102,8 @@ jobs:
           curl -fsS localhost:8092 | grep -q rocky1
       - name: Terraform shows no drift after apply
         run: |
-          terraform -chdir=terraform plan -input=false -detailed-exitcode -no-color -out=drift.tfplan > plan.txt || rc=$?
+          # Through ./lab-tf so the plan sees the same UID/GID variables the apply used
+          ./lab-tf plan -detailed-exitcode -no-color -out=drift.tfplan > plan.txt || rc=$?
           if [[ "${rc:-0}" -ne 0 ]]; then
             cat plan.txt
             # Which resources and which attributes want to change, as a readable annotation
